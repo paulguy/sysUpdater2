@@ -1,0 +1,10 @@
+CMakeCache.txt
+CMakeFiles
+cmake_install.cmake
+Makefile
+sysUpdater2
+sysUpdater2-stripped
+*.3dsx
+*.smdh
+*.bnr
+*.cia
