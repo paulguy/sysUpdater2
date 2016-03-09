@@ -22,8 +22,10 @@ void closeFileHandle(const Handle handle) {
 
 // Opens the SD card so files can be opened from it.
 int sdmcArchiveInit() {
+  Result response;
+  
   sdmcArchive = (FS_Archive) {ARCHIVE_SDMC, (FS_Path) {PATH_EMPTY, 1, (u8 *) ""}};
-  if(R_FAILED(FSUSER_OpenArchive(&sdmcArchive))) {
+  if(R_FAILED(response = FSUSER_OpenArchive(&sdmcArchive))) {
     return(-1);
   }
   

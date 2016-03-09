@@ -68,6 +68,7 @@ int main(int argc, char **argv) {
   cfguExit();
   printRegionModelMain(con, info);
   printMode(con, mode);
+  stepFrame();
 
   running = 1;
   while(aptMainLoop() && running) {
@@ -144,7 +145,16 @@ int main(int argc, char **argv) {
         clearDisplay(con);
         printf("Installing CIAs...\n");
 
+        if(R_FAILED(srvInit())) {
+          printf("Failed to initialize SRV.\n");
+          stepFrame();
+          waitKey();
+          printMain(con, info, mode);
+          break;
+        }
+
         if(R_FAILED(amInit())) {
+          srvExit();
           printf("Failed to initialize AM.\n");
           stepFrame();
           waitKey();
@@ -154,6 +164,7 @@ int main(int argc, char **argv) {
 
         if(R_FAILED(fsInit())) {
           amExit();
+          srvExit();
           printf("Failed to initialize FS.\n");
           stepFrame();
           waitKey();
@@ -164,6 +175,7 @@ int main(int argc, char **argv) {
         if(sdmcArchiveInit() < 0 ) {
           fsExit();
           amExit();
+          srvExit();
           printf("Failed to open SD card.\n");
           stepFrame();
           waitKey();
@@ -184,6 +196,7 @@ int main(int argc, char **argv) {
         sdmcArchiveExit();
         amExit();
         fsExit();
+        srvExit();
         printf("Press any key to continue . . .");
         stepFrame();
         waitKey();
@@ -192,6 +205,7 @@ int main(int argc, char **argv) {
       case SU2_ACT_MODE:
         mode = (mode + 1) % 4;
         printMode(con, mode);
+        stepFrame();
         break;
       case SU2_ACT_EXPLOIT:
         clearDisplay(con);
