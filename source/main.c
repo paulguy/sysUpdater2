@@ -511,22 +511,27 @@ int installCIAs(PrintConsole *con, InstallMode mode) {
     stepFrame();
 #ifdef ARMED
     proceed = 1;
-    while(proceed == 1) {
-      if(deleteTitle(titlesToInstall->title[i]->titleID) < 0) {
-        printf("Failed to delete title %016llX, retry?\n",
-               titlesToInstall->title[i]->titleID);
-        response = yesNoCancel();
-        if(response == 1) {
-          continue;
-        } else if(response == 0) {
-          proceed = 0;
-          break;
-        } else if(response == -1) {
-          proceed = 0;
-          giveUp = 1;
-          break;
+    for(j = 0; j < installedTitles; j++) {
+      if(titlesToInstall->title[i]->titleID == installedTitles->title[j]->titleID) {      
+        while(proceed == 1) {
+          if(deleteTitle(titlesToInstall->title[i]->titleID) < 0) {
+            printf("Failed to delete title %016llX, retry?\n",
+                   titlesToInstall->title[i]->titleID);
+            response = yesNoCancel();
+            if(response == 1) {
+              continue;
+            } else if(response == 0) {
+              proceed = 0;
+              break;
+            } else if(response == -1) {
+              proceed = 0;
+              giveUp = 1;
+              break;
+            }
+          } else {
+            break;
+          }
         }
-      } else {
         break;
       }
     }
