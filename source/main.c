@@ -511,7 +511,7 @@ int installCIAs(PrintConsole *con, InstallMode mode) {
     stepFrame();
 #ifdef ARMED
     proceed = 1;
-    for(j = 0; j < installedTitles; j++) {
+    for(j = 0; j < installedTitles->nTitles; j++) {
       if(titlesToInstall->title[i]->titleID == installedTitles->title[j]->titleID) {      
         while(proceed == 1) {
           if(deleteTitle(titlesToInstall->title[i]->titleID) < 0) {
