@@ -6,6 +6,7 @@
 #include "sysInfo.h"
 #include "cia.h"
 #include "file.h"
+#include "log.h"
 #include "SuperUserLib3DS/libsu.h"
 
 typedef enum {
@@ -15,7 +16,8 @@ typedef enum {
   SU2_ACT_LIST,
   SU2_ACT_INSTALL,
   SU2_ACT_MODE,
-  SU2_ACT_EXPLOIT
+  SU2_ACT_EXPLOIT,
+  SU2_ACT_FIRMTRANSFER
 } MenuAction;
 
 typedef enum {
@@ -56,6 +58,23 @@ int main(int argc, char **argv) {
   if(con == NULL) {
     return(0); //Nothing is initialized at this point, so we should be able to just exit...
   }
+  
+  if(R_FAILED(fsInit())) {
+    printf("Failed to initialize FS.\n");
+    printf("Press any key to quit . . .");
+    stepFrame();
+    waitKey();
+    return(0);
+  }
+  if(sdmcArchiveInit() < 0 ) { // need this early for logging
+    printf("Couldn't open SD card.\n");
+    printf("Press any key to quit . . .");
+    stepFrame();
+    waitKey();
+    return(0);
+  }
+
+  LOG_OPEN();
 
   printMenu();
 
@@ -70,54 +89,42 @@ int main(int argc, char **argv) {
   printMode(con, mode);
   stepFrame();
 
+  LOG_INFO("Main loop start");
+
   running = 1;
   while(aptMainLoop() && running) {
     keys = getKeyState();
     
     switch(getActionFromKeys(keys)) {
       case SU2_ACT_EXIT:
+        LOG_INFO("Exit requested");
         printf("Exiting...\n");
         stepFrame();
         running = 0;
         break;
       case SU2_ACT_CHECK:
+        LOG_INFO("CIA file check requested");
         clearDisplay(con);
         printf("Checking CIA files...\n");
         if(R_FAILED(amInit())) {
+          LOG_ERROR("Failed to initialize AM.");
           printf("Failed to initialize AM.\n");
           stepFrame();
           waitKey();
           printMain(con, info, mode);
           break;
         }
-        if(R_FAILED(fsInit())) {
-          amExit();
-          printf("Failed to initialize FS.\n");
-          stepFrame();
-          waitKey();
-          printMain(con, info, mode);
-          break;
-        }
-        if(sdmcArchiveInit() < 0 ) {
-          fsExit();
-          amExit();
-          printf("Couldn't open SD card.\n");
-          waitKey();
-          printMain(con, info, mode);
-          break;
-        }
         const SysInfo *CIAInfo = checkCIAs(con);
-        sdmcArchiveExit();
-        fsExit();
         amExit();
         if(CIAInfo == NULL) {
+          LOG_INFO("No match found.");
           printf("No match found, not recommended you continue\n" \
                  "unless you know what you're doing.  Also This\n" \
                  "doesn't necessarily mean your update is bad,\n" \
                  "just that this program doesn't recognize it.\n\n" \
                  "Recognized versions: 9.2.0-20 J/U/E New/Old 3DS\n");
         } else {
-          printf("Match found with ");
+          LOG_INFO("Match found.");
           printRegionModel(CIAInfo);
           printf(".\n");
           if(CIAInfo->region == info->region && matchModels(CIAInfo->model, info->model)) {
@@ -133,6 +140,7 @@ int main(int argc, char **argv) {
         printMain(con, info, mode);
         break;
       case SU2_ACT_LIST:
+        LOG_INFO("List installed titles requested.");
         clearDisplay(con);
         printf("Listing installed titles...\n");
         listInstalledTitles(con);
@@ -142,10 +150,12 @@ int main(int argc, char **argv) {
         printMain(con, info, mode);
         break;
       case SU2_ACT_INSTALL:
+        LOG_INFO("Install requested.");
         clearDisplay(con);
         printf("Installing CIAs...\n");
 
         if(R_FAILED(srvInit())) {
+          LOG_ERROR("Failed to initialize SRV.");
           printf("Failed to initialize SRV.\n");
           stepFrame();
           waitKey();
@@ -154,6 +164,7 @@ int main(int argc, char **argv) {
         }
 
         if(R_FAILED(amInit())) {
+          LOG_ERROR("Failed to initialize AM.");
           srvExit();
           printf("Failed to initialize AM.\n");
           stepFrame();
@@ -162,40 +173,19 @@ int main(int argc, char **argv) {
           break;
         }
 
-        if(R_FAILED(fsInit())) {
-          amExit();
-          srvExit();
-          printf("Failed to initialize FS.\n");
-          stepFrame();
-          waitKey();
-          printMain(con, info, mode);
-          break;
-        }
-
-        if(sdmcArchiveInit() < 0 ) {
-          fsExit();
-          amExit();
-          srvExit();
-          printf("Failed to open SD card.\n");
-          stepFrame();
-          waitKey();
-          printMain(con, info, mode);
-          break;
-        }
-
         if(installCIAs(con, mode) < 0) {
+          LOG_INFO("CIA installation failed.");
           printf("Installation of CIAs failed!\n\n" \
                  "If only some installed successfully, you might\n" \
                  "have a bricked 3DS at this point, sorry...\n\n" \
                  "If the install was canceled or errored before it\n" \
                  "started, there should be no problems.\n");
         } else {
+          LOG_INFO("CIA installation succeeded.");
           printf("Installation successful!\n" \
                  "Suggest you shut off the 3DS and power it back on.\n\n");
         }
-        sdmcArchiveExit();
         amExit();
-        fsExit();
         srvExit();
         printf("Press any key to continue . . .");
         stepFrame();
@@ -203,13 +193,16 @@ int main(int argc, char **argv) {
         printMain(con, info, mode);
         break;
       case SU2_ACT_MODE:
+        LOG_INFO("Mode changed to %d.", mode);
         mode = (mode + 1) % 4;
         printMode(con, mode);
         stepFrame();
         break;
       case SU2_ACT_EXPLOIT:
+        LOG_INFO("Activate exploit requested.");
         clearDisplay(con);
         if(testAMuAccess() == 1) {
+          LOG_INFO("Exploit already activated or not needed.");
           printf("We already have AM:u access.\n");
         } else {
           printf("This will try to activate the exploit needed to\n" \
@@ -229,16 +222,19 @@ int main(int argc, char **argv) {
           printf("Trying exploit...\n");
           if(suInit() == 0) {
             if(testAMuAccess() == 1) {
+              LOG_INFO("Exploit success.");
               printf("The exploit appeared to succeed.  Quitting this\n" \
                      "program now will crash, so you'll have to shut\n" \
                      "off the 3DS by holding power when you want to\n" \
                      "quit.\n");
             } else {
+              LOG_INFO("Exploit reported failure, but no AM:u access.");
               printf("The exploit reported success but we don't have\n" \
                      "AM:u access, so we can't install anything.\n" \
                      "Suggest shutting off the 3DS and trying again.\n");
             }
           } else {
+            LOG_INFO("Exploit failed.");
             printf("The exploit didn't crash, but it failed.\n\n" \
                    "You should probably shut down fully then restart\n" \
                    "before trying again.\n");
@@ -249,14 +245,42 @@ int main(int argc, char **argv) {
         waitKey();
         printMain(con, info, mode);
         break;
+      case SU2_ACT_FIRMTRANSFER:
+        LOG_INFO("Firmware transfer requested.");
+        printf("Installing NATIVE_FIRM, this will probably crash but\n" \
+               "still succeed, maybe.\n");
+        printf("Press any key to continue . . .\n");
+        stepFrame();
+        waitKey();
+#ifdef ARMED
+        if(R_FAILED(AM_InstallNativeFirm())) {
+          LOG_INFO("Firmware transfer failed.");
+          printf("Installing NATIVE_FIRM failed.\n");
+        } else {
+          LOG_INFO("Firmware transfer succeeded.");
+          printf("Installing NATIVE_FIRM succeeded.\n");
+        }
+#else
+        printf("Not performed in DISAARMED edition.\n");
+#endif
+        printf("Press any key to continue . . .\n");
+        stepFrame();
+        waitKey();
+        printMain(con, info, mode);
+        break;
       default:
         break;
     }
     
     gspWaitForVBlank();
   }
+
+  LOG_INFO("Main loop end");
   
 finish:
+  LOG_CLOSE();
+  sdmcArchiveExit();
+  fsExit();
   uninitializeDisplay();
   
   return(0);
@@ -271,7 +295,7 @@ void printMain(PrintConsole *con, SysInfo *info, InstallMode mode) {
 }  
 
 void printMenu() {
-  printf("sysUpdater2 by paulguy\n\n" \
+  printf("sysUpdater2 by paulguy\n" \
          "based heavily on SafeSysUpdater\n" \
          "by cpasjuste\n\n" \
          "Press (A) to verify CIAs\n" \
@@ -280,7 +304,14 @@ void printMenu() {
          "Press (B) to exit\n" \
          "Press [SELECT] to change mode\n" \
          "Press [START] to try exploit.  This will be needed" \
-         "to actually install anything.\n\n" \
+         "to actually install anything.\n" \
+         "Press [L) to transfer 00040138{0,2}0000002 to\n" \
+         "NATIVE_FIRM.  Needed for if an update including\n" \
+         "one of those failed partway through.  Avoids a\n" \
+         "frankenfirmware.  Will probably crash after but\n" \
+         "it should be OK.  Doesn't seem necessary for the\n" \
+         "9.2 downgrade but might be necessary for the 2.1\n" \
+         "downgrade.\n\n"
          "CIAs will be installed from SDMC:" CIAS_PATH "\n\n");
 }
 
@@ -349,6 +380,8 @@ MenuAction getActionFromKeys(u32 keys) {
       return(SU2_ACT_MODE);
     case KEY_START:
       return(SU2_ACT_EXPLOIT);
+    case KEY_L:
+      return(SU2_ACT_FIRMTRANSFER);
     default:
       return(SU2_ACT_NONE);
   }
@@ -358,9 +391,11 @@ MenuAction getActionFromKeys(u32 keys) {
 
 void listInstalledTitles(PrintConsole *con) {
   TitleList *installedTitles;
+  LOG_VERBOSE("listInstalledTitles");
   
   if(R_FAILED(amInit())) {
     printf("Couldn't initialize AM.\n");
+    LOG_VERBOSE("Couldn't initialize AM.");
     return;
   }
   installedTitles = getInstalledTitles();
@@ -384,31 +419,32 @@ int installCIAs(PrintConsole *con, InstallMode mode) {
   int response;
   char ciaPath[9 + 16 + 4 + 1]; // /updates/ + 16 hex digits + .cia + \0
   int i, j;
+
+  LOG_INFO("Installing CIAs.");
   
   printf("Your 3DS shouldn't be bricked by failures until\n" \
          "you're told it can, but there's always a risk!\n\n");
   
-  if(R_FAILED(amInit())) {
-    printf("Couldn't initialize AM.\n");
-    return(-1);
-  }
   printf("Getting installed titles...\n");
   installedTitles = getInstalledTitles();
   if(installedTitles == NULL) {
+    LOG_ERROR("Couldn't get installed titles.");
     printf("Failed to get list of installed titles.\n");
     return(-1);
   }
   
-  printf("Gathering CIAs, this may take a while...\n");
+  printf("Gathering CIAs, this may take several minutes...\n");
   stepFrame();
   titlesToInstall = getUpdateCIAs();
   if(titlesToInstall == NULL) {
-    printf("Failed to get list of CIAs from SD.\n");
+    printf("Failed to get list of CIAs from SD card.\n");
+    LOG_ERROR("Failed to get list of CIAs from SD card.");
     freeTitleList(installedTitles);
     return(-1);
   }
   if(titlesToInstall->nTitles == 0) {
     printf("There are no CIAs found.\nThere is nothing to do.\n");
+    LOG_VERBOSE("No CIAs on SD card.");
     freeTitleList(installedTitles);
     freeTitleList(titlesToInstall);
     return(-1);
@@ -444,7 +480,7 @@ int installCIAs(PrintConsole *con, InstallMode mode) {
         for(j = 0; j < installedTitles->nTitles; j++) {
           if(titlesToInstall->title[i]->titleID == installedTitles->title[j]->titleID) {
             // Skip if newer or equal
-            if(titlesToInstall->title[i]->version >= installedTitles->title[j]->version) {
+            if(titlesToInstall->title[i]->version <= installedTitles->title[j]->version) {
               skipped->title[i] = titlesToInstall->title[i];
               titlesToInstall->title[i] = NULL;
               break;
@@ -475,10 +511,22 @@ int installCIAs(PrintConsole *con, InstallMode mode) {
   
   if(titlesToInstall->nTitles == 0) {
     printf("There are no CIAs to install based on mode.\nThere is nothing to do.\n");
+    LOG_VERBOSE("No CIAs meet mode criteria.");
     freeTitleList(installedTitles);
     freeTitleList(titlesToInstall);
     freeTitleList(skipped);
     return(0);
+  }
+  
+  LOG_VERBOSE("Titles to install");
+  for(i = 0; i < titlesToInstall->nTitles; i++) {
+    LOG_VERBOSE("%016llX %04X", titlesToInstall->title[i]->titleID,
+                                titlesToInstall->title[i]->version);
+  }
+  LOG_VERBOSE("Titles skipped");
+  for(i = 0; i < skipped->nTitles; i++) {
+    LOG_VERBOSE("%016llX %04X", skipped->title[i]->titleID,
+                                skipped->title[i]->version);
   }
   
   //Print packages to be installed
@@ -519,16 +567,19 @@ int installCIAs(PrintConsole *con, InstallMode mode) {
   
   giveUp = 0;
   for(i = 0; i < titlesToInstall->nTitles; i++) {
+    LOG_VERBOSE("Installing %016llX", titlesToInstall->title[i]->titleID);
     snprintf(ciaPath, 9 + 16 + 4 + 1, CIAS_PATH "%016llX.cia",
              titlesToInstall->title[i]->titleID);
-    printf("Installing %s...\n", ciaPath);
+    printf("Installing %s... ", ciaPath);
     stepFrame();
-#ifdef ARMED
     proceed = 1;
     for(j = 0; j < installedTitles->nTitles; j++) {
       if(titlesToInstall->title[i]->titleID == installedTitles->title[j]->titleID) {      
+        LOG_VERBOSE("Deleting already installed %016llX.",
+                    installedTitles->title[j]->titleID);
         while(proceed == 1) {
           if(deleteTitle(titlesToInstall->title[i]->titleID) < 0) {
+            LOG_ERROR("Failed deleting %016llX.", installedTitles->title[i]->titleID);
             printf("Failed to delete title %016llX, retry?\n",
                    titlesToInstall->title[i]->titleID);
             response = yesNoCancel();
@@ -550,7 +601,9 @@ int installCIAs(PrintConsole *con, InstallMode mode) {
       }
     }
     while(proceed == 1) {
+      LOG_VERBOSE("Installing title %016llX.", titlesToInstall->title[i]->titleID);
       if(installTitleFromCIA(ciaPath, con) < 0) {
+        LOG_ERROR("Failed installing %016llX.", titlesToInstall->title[i]->titleID);
         printf(" \nInstall failed, retry?\n");
         response = yesNoCancel();
         printf("\n");
@@ -568,11 +621,30 @@ int installCIAs(PrintConsole *con, InstallMode mode) {
         break;
       }
     }
+    
+    if(giveUp == 1) {
+      LOG_ERROR("Given up.");
+      printf("Giving up.\n");
+      stepFrame();
+      break;
+    }
+    
+    LOG_INFO("Installing %016llX succeeded.", titlesToInstall->title[i]->titleID);
+    printf(" \nSuccess!\n");
+    stepFrame();
+  }
+
+  // This seems to actually install to the real NAND0/NAND1 through rxTools...
+  // Also generally causes a crash a few seconds later, so do this last.
+  for(i = 0; i < titlesToInstall->nTitles; i++) {
     if(titlesToInstall->title[i]->titleID == 0x0004013800000002 ||
        titlesToInstall->title[i]->titleID == 0x0004013820000002) {
+      LOG_INFO("Installing firmware to NATIVE_FIRM.");
       printf(" \nInstalling NATIVE_FIRM...");
+#ifdef ARMED
       while(proceed == 1) {
         if(R_FAILED(AM_InstallNativeFirm())) {
+          LOG_ERROR("Installing firmware to NATIVE_FIRM failed.");
           printf("\nInstalling NATIVE_FIRM failed, retry?\n");
           response = yesNoCancel();
           printf("\n");
@@ -590,21 +662,10 @@ int installCIAs(PrintConsole *con, InstallMode mode) {
           break;
         }
       }
-    }
-    
-    if(giveUp == 1) {
-      printf("Giving up.\n");
-      stepFrame();
-      break;
-    }
-    
-    printf(" \nSuccess!\n");
-    stepFrame();
-#else
-    printf("Nothing done.\n");
 #endif
+    }
   }
-  
+
   freeTitleList(installedTitles);
   freeTitleList(titlesToInstall);
   freeTitleList(skipped);
@@ -613,6 +674,7 @@ int installCIAs(PrintConsole *con, InstallMode mode) {
     return(-1);
   }
   
+  LOG_INFO("Installing CIAs succeeded.");
   return(0);
 }
 

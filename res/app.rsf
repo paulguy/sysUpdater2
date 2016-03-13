@@ -9,9 +9,7 @@ BasicInfo:
   CompanyCode: 00
 AccessControlInfo:
   MemoryType: Application
-  SystemModeExt: Legacy
   InterruptNumbers:
-  EnableForceDebug: False
   HandleTableSize: 0x200
   IoAccessControl:
   ServiceAccessControl:
@@ -63,18 +61,17 @@ AccessControlInfo:
    - DirectSdmcWrite
    - CtrNandRo
   IdealProcessor: 0
-  DisableDebug: False
+  DisableDebug: True
   EnableL2Cache: False
-  CanUsePrivilegedPriority: False
+  CanUsePrivilegedPriority: True
   CanShareDeviceMemory: False
   SpecialMemoryArrange: False
   CanUseNonAlphabetAndNumber: False
   CanWriteSharedPage: False
   UseOtherVariationSaveData: False
-  RunnableOnSleep: False
+  RunnableOnSleep: True
   PermitMainFunctionArgument: False
-  UseExtSaveData: True
-  CanAccessCore2: False
+  EnableForceDebug: False
   ReleaseKernelMajor: 2
   ReleaseKernelMinor: 33
   SystemCallAccess:

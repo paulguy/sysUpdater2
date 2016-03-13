@@ -3,6 +3,7 @@
 #include <malloc.h>
 
 #include "sysInfo.h"
+#include "log.h"
 
 static const u32 priorities[] = {
         0x00040138, // System Firmware
@@ -25,8 +26,6 @@ static const u64 beforeApplets[] = {
   0x0004001000020000, 0x0004001000021000, 0x0004001000022000, 
   0x0004001000026000, 0x0004001000027000, 0x0004001000028000, // System Settings
   // Early Applets
-  0x0004003000008A02, 0x0004003000008A03, 0x0004003020008A03, // ErrDisp
-  0x0004003000008202, 0x0004003000008F02, 0x0004003000009802,
   0x000400300000A102, 0x000400300000A902, 0x000400300000B102, // Home Menu
   0x0004003000008802, 0x0004003000009402, 0x0004003000009D02,
   0x000400300000A602, 0x000400300000AE02, 0x000400300000B602, // Old 3DS Internet Browser
@@ -34,7 +33,11 @@ static const u64 beforeApplets[] = {
   0x000400302000AE02, // New 3DS Internet Browser
   // Stuff might freak out about the wrong software keyboard version...
   0x000400300000C002, 0x000400300000C802, 0x000400300000D002,
-  0x000400300000D802, 0x000400300000DE02, 0x000400300000E402 // Software Keyboard
+  0x000400300000D802, 0x000400300000DE02, 0x000400300000E402, // Software Keyboard
+  // This update seems to succeed but always crash immediately afterwards, so it
+  // should be safer here
+  0x0004003000008A02, 0x0004003000008A03, 0x0004003020008A03, // ErrDisp
+  0x0004003000008202, 0x0004003000008F02, 0x0004003000009802
 };
 static const int nBeforeApplets = sizeof(beforeApplets) / sizeof(beforeApplets[0]);
 
@@ -122,24 +125,32 @@ int titleCompare(const void *t1, const void *t2) {
 }
 
 void rearrangeTitles(TitleList *titles) {
+  LOG_VERBOSE("Rearranging titles.");
   qsort(titles->title, titles->nTitles, sizeof(AM_TitleEntry *), titleCompare);
 }
 
 // CFGU should be initialized for this
 SysInfo *getSysInfo() {
+  LOG_VERBOSE("Getting system info.");
   Result ret;
   SysInfo *sysInfo = (SysInfo *) malloc(sizeof(SysInfo));
-    
+  if(sysInfo == NULL) {
+    LOG_ERROR("getSysInfo: Couldn't allocate memory.");
+    return(NULL);
+  }
+  
   ret = CFGU_GetSystemModel(&sysInfo->model);
-  if (R_FAILED(ret)) {
+  if(R_FAILED(ret)) {
+    LOG_ERROR("getSysInfo: CFGU_GetSystemModel failed.");
     free(sysInfo);
-    return NULL;
+    return(NULL);
   }
     
   ret = CFGU_SecureInfoGetRegion(&sysInfo->region);
-  if (R_FAILED(ret)) {
+  if(R_FAILED(ret)) {
+    LOG_ERROR("getSysInfo: CFGU_SecureInfoGetRegion failed.");
     free(sysInfo);
-    return NULL;
+    return(NULL);
   }
 
   return sysInfo;
@@ -149,6 +160,7 @@ TitleList *initTitleList(int count, int pointersOnly) {
   TitleList *titles;
   int i;
 
+  LOG_VERBOSE("initTitleList");
   titles = malloc(sizeof(TitleList));
   if(titles == NULL) {
     goto error0;
@@ -172,6 +184,7 @@ TitleList *initTitleList(int count, int pointersOnly) {
     titles->__buffer = NULL;
   }
 
+  LOG_VERBOSE("initTitleList succeeded");
   return(titles);
   
 error2:
@@ -179,10 +192,12 @@ error2:
 error1:
   free(titles);
 error0:
+  LOG_ERROR("initTitleList failed");
   return(NULL);
 }
 
 void freeTitleList(TitleList *titles) {
+  LOG_VERBOSE("freeTitleList");
   if(titles->__buffer != NULL) {
     free(titles->__buffer);
   }
@@ -195,6 +210,7 @@ TitleList *getInstalledTitles() {
   TitleList *titles;
   u32 count;
 
+  LOG_VERBOSE("Getting installed titles.");
   if (R_FAILED(AM_GetTitleCount(MEDIATYPE_NAND, &count))) {
       return(NULL);
   }
@@ -202,19 +218,23 @@ TitleList *getInstalledTitles() {
   titles = initTitleList(count, 0);
 
   u64 titlesId[titles->nTitles];
-  if (AM_GetTitleIdList(MEDIATYPE_NAND, titles->nTitles, titlesId)) {
-      goto error1;
+  if (R_FAILED(AM_GetTitleIdList(MEDIATYPE_NAND, titles->nTitles, titlesId))) {
+    LOG_ERROR("getInstalledTitles: AM_GetTitleIdList failed.");
+    goto error1;
   }
 
-  if (AM_ListTitles(MEDIATYPE_NAND, count, titlesId, titles->__buffer)) {
-      goto error1;
+  if (R_FAILED(AM_ListTitles(MEDIATYPE_NAND, count, titlesId, titles->__buffer))) {
+    LOG_ERROR("getInstalledTitles: AM_ListTitles failed.");
+    goto error1;
   }
 
+  LOG_VERBOSE("Succeeded getting installed titles.");
   return titles;
 
 error1:
   freeTitleList(titles);
 error0:
+  LOG_ERROR("Failed getting installed titles.");
   return(NULL);
 }
 

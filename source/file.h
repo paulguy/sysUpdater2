@@ -10,5 +10,6 @@ void sdmcArchiveExit();
 Handle openDirectory(const char *path);
 int getNextFile(Handle dir, FS_DirectoryEntry *ent);
 void closeDirectory(Handle dir);
+int deleteFile(const char *path);
 
 #endif

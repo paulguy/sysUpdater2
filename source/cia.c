@@ -8,6 +8,7 @@
 #include "util.h"
 #include "buffer.h"
 #include "cia.h"
+#include "log.h"
 
 // /updates/ + 16 digit hex + .cia + \0
 #define UPDATE_FILENAME_LEN (9 + 16 + 4 + 1)
@@ -152,7 +153,7 @@ const SysInfo *checkCIAs(PrintConsole *con) {
   TitleList *updateCIAs;
   
   int i;
-  printf("Gathering CIAs, this may take a while...\n");
+  printf("Gathering CIAs, this may take several minutes...\n");
   updateCIAs = getUpdateCIAs();
 
   for(i = 0; i < UPDATEINFO_COUNT; i++) {
@@ -172,11 +173,13 @@ const SysInfo *checkCIAs(PrintConsole *con) {
   return(NULL);
 }
 
-#ifdef ARMED
 int deleteTitle(u64 titleID) {
+  LOG_INFO("deleteTitle: %016llX", titleID);
+#ifdef ARMED
   if(R_FAILED(AM_DeleteTitle(MEDIATYPE_NAND, titleID))) {
     return(-1);
   }
+#endif
   
   return(0);
 }
@@ -188,21 +191,28 @@ int installTitleFromCIA(const char *path, PrintConsole *con) {
   u64 totalread;
   int animpos;
   
+  LOG_INFO("installTitleFromCIA: Installing CIA from %s.", path);
+  
   CIAIn = openFileHandle(path, FS_OPEN_READ);
   if(CIAIn == 0) {
+    LOG_ERROR("installTitleFromCIA: Failed to open %s.", path);
     printf("Failed to open file %s.\n", path);
     goto error0;
   }
-  
+
+#ifdef ARMED
   if(R_FAILED(AM_StartCiaInstall(MEDIATYPE_NAND, &CIAOut))) {
+    LOG_ERROR("installTitleFromCIA: AM_StartCiaInstall failed.");
     printf("Failed to start CIA install.\n");
     goto error1;
   }
+#endif
   
   bytesread = BUFFERSIZE;
   totalread = 0;
   while(bytesread == BUFFERSIZE) {
     printf("%c", anim[animpos]);
+    stepFrame();
     con->cursorX--;
     animpos = (animpos + 1) % 4;
     
@@ -211,39 +221,49 @@ int installTitleFromCIA(const char *path, PrintConsole *con) {
       stepFrame();
       goto error2;
     }
+#ifdef ARMED
     if(R_FAILED(FSFILE_Write(CIAOut, &byteswritten, totalread, buffer, bytesread, FS_WRITE_FLUSH))) {
       printf("\nFailed to write %s around %llu!\n", path, totalread);
       stepFrame();
       goto error2;
     }
     if(byteswritten < bytesread) {
-      printf("\nIncompelete write to %s around %llu!\n", path, totalread);
+      LOG_ERROR("installTitleFromCIA: Incomplete write around %llu.", totalread);
+      printf("\nIncompelete write around %llu!\n", totalread);
       stepFrame();
       goto error2;
     }
+#endif
 
     totalread += bytesread;
   }
-  
+
+#ifdef ARMED
   if(R_FAILED(AM_FinishCiaInstall(MEDIATYPE_NAND, &CIAOut))) {
+    LOG_ERROR("installTitleFromCIA: AM_FinishCiaInstall failed.");
     printf("Failed to finalize CIA install.\n");
     goto error2;
   }
+#endif
   
   closeFileHandle(CIAIn);
 
+  LOG_INFO("Successfully installed %s.", path);
   return(0);
   
 error2:
+#ifdef ARMED
   if(R_FAILED(AM_CancelCIAInstall(&CIAOut))) {
     printf("Couldn't cancel unsuccessful CIA install.\n");
   }
+#endif
 error1:
   closeFileHandle(CIAIn);
 error0:
+
+  LOG_ERROR("Failed installing %s.", path);
   return(-1);
 }
-#endif
 
 int isCIAName(const char *name) {
   int i;
@@ -292,9 +312,11 @@ TitleList *getUpdateCIAs() {
   TitleList *updateCIAs;
   char ciaPath[9 + 16 + 4 + 1]; // /updates/ + 16 hex digits + .cia + \0
   
+  LOG_INFO("getUpdateCIAs");
   // Run through first and count .cia files.
   dir = openDirectory(CIAS_PATH);
   if(dir == 0) {
+    LOG_ERROR("getUpdateCIAs: Failed to open SDMC:" CIAS_PATH ".\n");
     printf("Failed to open SDMC:" CIAS_PATH ".\n");
     goto error0;
   }
@@ -304,6 +326,7 @@ TitleList *getUpdateCIAs() {
     
     if(ret < 1) {
       if(ret == -1) {
+        LOG_ERROR("getUpdateCIAs: Error reading directory.");
         printf("Error reading directory.\n");
         goto error2;
       }
@@ -316,12 +339,13 @@ TitleList *getUpdateCIAs() {
     }
   }
   closeDirectory(dir);
-  
+  LOG_VERBOSE("Found %d files.", ciafiles);
   updateCIAs = initTitleList(ciafiles, 0);
   
   // Run through a second time and add CIA info.
   dir = openDirectory(CIAS_PATH);
   if(dir == 0) {
+    LOG_ERROR("getUpdateCIAs: Failed to open SDMC:" CIAS_PATH ".\n");
     printf("Failed to open SDMC:" CIAS_PATH ".\n");
     goto error1;
   }
@@ -329,6 +353,11 @@ TitleList *getUpdateCIAs() {
   for(;;) {
     ret = getNextFile(dir, &ent);
     if(ret < 1) {
+      if(ret == -1) {
+        LOG_ERROR("getUpdateCIAs: Error reading directory.");
+        printf("Error reading directory.\n");
+        goto error2;
+      }
       break;
     }
     
@@ -337,11 +366,13 @@ TitleList *getUpdateCIAs() {
       snprintf(ciaPath, 9 + 16 + 4 + 1, CIAS_PATH "%s", ent.name);
       CIAFile = openFileHandle(ciaPath, FS_OPEN_READ);
       if(CIAFile == 0) {
+        LOG_ERROR("getUpdateCIAs: Failed to open %s for read.\n", ciaPath);
         printf("Failed to open %s for read.\n", ciaPath);
         goto error2;
       }
       
       if(R_FAILED(AM_GetCiaFileInfo(MEDIATYPE_NAND, updateCIAs->title[ciafiles], CIAFile))) {
+        LOG_ERROR("getUpdateCIAs: Failed to get information on %s.\n", ciaPath);
         printf("Failed to get information on %s.\n", ciaPath);
         goto error3;
       }
@@ -349,10 +380,12 @@ TitleList *getUpdateCIAs() {
       closeFileHandle(CIAFile);
       
       ciafiles++;
+      LOG_VERBOSE("getUpdateCIAs: Added %s.", (char *)(ent.name));
     }
   }
   closeDirectory(dir);
   
+  LOG_INFO("getUpdateCIAs: Got CIAs from SD card.");
   return(updateCIAs);
 
 error3:
@@ -362,5 +395,6 @@ error2:
 error1:
   freeTitleList(updateCIAs);
 error0:
+  LOG_ERROR("getUpdateCIAs: Failed to get CIAs from SD card.");
   return(NULL);
 }
