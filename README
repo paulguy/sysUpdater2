@@ -27,3 +27,12 @@ Run it.
 If the exploit doesn't seem to work, try running this or some other application
 then quitting back to the menu then running this application.  This seems to be
 more reliable, but it can still fail sometimes.
+
+
+If you want to change the logo (If you're OK with the default, then you're all
+ready to go and don't need to bother with this.), you'll need to create a
+320x240 image, put it in /logo.png then process it with toctrfb.c.  This can be
+done by first building the tool by running buildtools.sh then running
+convertlogo.sh both within the tools directory.  It will be converted to RGB565
+with no real processing or anything (it literally just cuts off the low bits),
+so you should make sure it'll look alright.

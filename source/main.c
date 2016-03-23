@@ -8,6 +8,7 @@
 #include "file.h"
 #include "log.h"
 #include "SuperUserLib3DS/libsu.h"
+#include "logo_data.h"
 
 typedef enum {
   SU2_ACT_NONE,
@@ -354,10 +355,18 @@ void printMode(PrintConsole *con, InstallMode mode) {
 }
 
 PrintConsole *initializeDisplay() {
+  u8 *screen;
+  u16 width, height;
+  
   if(R_FAILED(hidInit())) {
     return(NULL);
   }
   gfxInitDefault();
+  
+  gfxSetScreenFormat(GFX_BOTTOM, GSP_RGB565_OES);
+  screen = gfxGetFramebuffer(GFX_BOTTOM, GFX_LEFT, &width, &height);
+  memcpy(screen, logo_data, logo_data_size < width * height * 2 ? logo_data_size : width * height * 2);
+  
   return(consoleInit(GFX_TOP, NULL));
 }
 

@@ -22,6 +22,8 @@ file(GLOB_RECURSE SOURCE_FILES
 )
 add_executable(sysUpdater2 ${SOURCE_FILES}) # Create the elf file
 
+target_embed_file(sysUpdater2 "res/logo.data") # Add logo data
+
 target_link_libraries(sysUpdater2 ${LIBCTRU_LIBRARIES}) # Link ctrulib
 
 target_include_directories(sysUpdater2 PUBLIC ${LIBCTRU_INCLUDE_DIRS}) # Add the ctrulib include folder

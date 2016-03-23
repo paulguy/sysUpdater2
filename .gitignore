@@ -9,3 +9,7 @@ sysUpdater2-stripped
 *.bnr
 *.cia
 *.zip
+*.a
+__sysUpdater2_embed_logo.data_include
+binaries_asm
+tools/toctrfb
