@@ -366,6 +366,9 @@ PrintConsole *initializeDisplay() {
   gfxSetScreenFormat(GFX_BOTTOM, GSP_RGB565_OES);
   screen = gfxGetFramebuffer(GFX_BOTTOM, GFX_LEFT, &width, &height);
   memcpy(screen, logo_data, logo_data_size < width * height * 2 ? logo_data_size : width * height * 2);
+  gfxSwapBuffers();
+  screen = gfxGetFramebuffer(GFX_BOTTOM, GFX_LEFT, &width, &height);
+  memcpy(screen, logo_data, logo_data_size < width * height * 2 ? logo_data_size : width * height * 2);
   
   return(consoleInit(GFX_TOP, NULL));
 }
