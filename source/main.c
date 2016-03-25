@@ -247,6 +247,8 @@ int main(int argc, char **argv) {
         printMain(con, info, mode);
         break;
       case SU2_ACT_FIRMTRANSFER:
+        TitleList *installedTitles;
+      
         LOG_INFO("Firmware transfer requested.");
         clearDisplay(con);
         printf("Installing NATIVE_FIRM, this will probably crash but\n" \
@@ -254,17 +256,38 @@ int main(int argc, char **argv) {
         printf("Press any key to continue . . .\n");
         stepFrame();
         waitKey();
-#ifdef ARMED
-        if(R_FAILED(AM_InstallNativeFirm())) {
-          LOG_INFO("Firmware transfer failed.");
-          printf("Installing NATIVE_FIRM failed.\n");
-        } else {
-          LOG_INFO("Firmware transfer succeeded.");
-          printf("Installing NATIVE_FIRM succeeded.\n");
+        
+        if(R_FAILED(amInit())) {
+          LOG_ERROR("Failed to initialize AM.");
+          printf("Failed to initialize AM.\n");
+          stepFrame();
+          waitKey();
+          printMain(con, info, mode);
+          break;
         }
+
+        printf("Getting installed titles...\n");
+        installTitles = getInstalledTitles();
+        printf("Finding firmware title...\n");
+        for(i = 0; i < installedTitles->nTitles; i++) {
+          if(installedTitles->title[i]->titleID == 0x0004013800000002 ||
+             installedTitles->title[i]->titleID == 0x0004013820000002) {
+#ifdef ARMED
+            if(R_FAILED(AM_InstallFirm(installedTitles->title[i]->titleID))) {
+              LOG_INFO("Firmware transfer failed.");
+              printf("Installing NATIVE_FIRM failed.\n");
+            } else {
+              LOG_INFO("Firmware transfer succeeded.");
+              printf("Installing NATIVE_FIRM succeeded.\n");
+            }
 #else
-        printf("Not performed in DISAARMED edition.\n");
+            printf("Not performed in DISAARMED edition.\n");              
 #endif
+            break;
+          }
+        }
+        freeTitleList(installedTitles);
+        amExit();
         printf("Press any key to continue . . .\n");
         stepFrame();
         waitKey();
@@ -280,6 +303,7 @@ int main(int argc, char **argv) {
   LOG_INFO("Main loop end");
   
 finish:
+  free(info);
   LOG_CLOSE();
   sdmcArchiveExit();
   fsExit();
@@ -311,9 +335,7 @@ void printMenu() {
          "NATIVE_FIRM.  Needed for if an update including\n" \
          "one of those failed partway through.  Avoids a\n" \
          "frankenfirmware.  Will probably crash after but\n" \
-         "it should be OK.  Doesn't seem necessary for the\n" \
-         "9.2 downgrade but might be necessary for the 2.1\n" \
-         "downgrade.\n\n"
+         "it should be OK.\n\n"
          "CIAs will be installed from SDMC:" CIAS_PATH "\n\n");
 }
 
@@ -656,7 +678,8 @@ int installCIAs(PrintConsole *con, InstallMode mode) {
       printf(" \nInstalling NATIVE_FIRM...");
 #ifdef ARMED
       while(proceed == 1) {
-        if(R_FAILED(AM_InstallNativeFirm())) {
+        // AM_InstallNativeFirm() does not work.
+        if(R_FAILED(AM_InstallFirm(titlesToInstall->title[i]->titleID))) {
           LOG_ERROR("Installing firmware to NATIVE_FIRM failed.");
           printf("\nInstalling NATIVE_FIRM failed, retry?\n");
           response = yesNoCancel();
