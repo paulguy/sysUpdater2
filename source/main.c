@@ -7,7 +7,7 @@
 #include "cia.h"
 #include "file.h"
 #include "log.h"
-#include "SuperUserLib3DS/libsu.h"
+#include "svchax/svchax.h"
 #include "logo_data.h"
 
 typedef enum {
@@ -46,6 +46,10 @@ MenuAction getActionFromKeys(u32 keys);
 void listInstalledTitles(PrintConsole *con);
 int installCIAs(PrintConsole *con, InstallMode mode);
 int testAMuAccess();
+
+// Stuff for libsu's patchServiceAccess()
+extern u8 isNew3DS;
+extern void patchServiceAccess();
 
 int main(int argc, char **argv) {
   PrintConsole *con;
@@ -86,6 +90,10 @@ int main(int argc, char **argv) {
   }
   info = getSysInfo();
   cfguExit();
+  
+  // Needed for libsu patchServiceAccess()
+  isNew3DS = matchModels(info->model, MODEL_N3DS);
+  
   printRegionModelMain(con, info);
   printMode(con, mode);
   stepFrame();
@@ -155,18 +163,8 @@ int main(int argc, char **argv) {
         clearDisplay(con);
         printf("Installing CIAs...\n");
 
-        if(R_FAILED(srvInit())) {
-          LOG_ERROR("Failed to initialize SRV.");
-          printf("Failed to initialize SRV.\n");
-          stepFrame();
-          waitKey();
-          printMain(con, info, mode);
-          break;
-        }
-
         if(R_FAILED(amInit())) {
           LOG_ERROR("Failed to initialize AM.");
-          srvExit();
           printf("Failed to initialize AM.\n");
           stepFrame();
           waitKey();
@@ -187,7 +185,6 @@ int main(int argc, char **argv) {
                  "Suggest you shut off the 3DS and power it back on.\n\n");
         }
         amExit();
-        srvExit();
         printf("Press any key to continue . . .");
         stepFrame();
         waitKey();
@@ -220,8 +217,11 @@ int main(int argc, char **argv) {
                  "Press any key to continue . . .\n");
           stepFrame();
           waitKey();
+
           printf("Trying exploit...\n");
-          if(suInit() == 0) {
+          svchax_init();
+          if(__ctr_svchax > 0) {
+            patchServiceAccess();
             if(testAMuAccess() == 1) {
               LOG_INFO("Exploit success.");
               printf("The exploit appeared to succeed.  Quitting this\n" \
@@ -248,6 +248,7 @@ int main(int argc, char **argv) {
         break;
       case SU2_ACT_FIRMTRANSFER:
         LOG_INFO("Firmware transfer requested.");
+        clearDisplay(con);
         printf("Installing NATIVE_FIRM, this will probably crash but\n" \
                "still succeed, maybe.\n");
         printf("Press any key to continue . . .\n");
@@ -366,7 +367,7 @@ PrintConsole *initializeDisplay() {
   gfxSetScreenFormat(GFX_BOTTOM, GSP_RGB565_OES);
   screen = gfxGetFramebuffer(GFX_BOTTOM, GFX_LEFT, &width, &height);
   memcpy(screen, logo_data, logo_data_size < width * height * 2 ? logo_data_size : width * height * 2);
-  gfxSwapBuffers();
+  gfxSwapBuffers();  // copy in to both buffers
   screen = gfxGetFramebuffer(GFX_BOTTOM, GFX_LEFT, &width, &height);
   memcpy(screen, logo_data, logo_data_size < width * height * 2 ? logo_data_size : width * height * 2);
   
@@ -407,7 +408,7 @@ void listInstalledTitles(PrintConsole *con) {
   
   if(R_FAILED(amInit())) {
     printf("Couldn't initialize AM.\n");
-    LOG_VERBOSE("Couldn't initialize AM.");
+    LOG_ERROR("Couldn't initialize AM.");
     return;
   }
   installedTitles = getInstalledTitles();
@@ -693,15 +694,12 @@ int installCIAs(PrintConsole *con, InstallMode mode) {
 int testAMuAccess() {
     Handle amHandle = 0;
 
-    srvInit();
     // verify am:u access
     srvGetServiceHandleDirect(&amHandle, "am:u");
     if (amHandle) {
         svcCloseHandle(amHandle);
-        srvExit();
         return(1);
     }
     
-    srvExit();
     return(0);
 }
