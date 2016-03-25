@@ -1,5 +1,6 @@
 #include <3ds.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "util.h"
@@ -58,6 +59,7 @@ int main(int argc, char **argv) {
   int i;
   int running;
   InstallMode mode = MODE_NEVER; // Default to a safe, disarmed mode.
+  TitleList *installedTitles;
 
   con = initializeDisplay();
   if(con == NULL) {
@@ -246,9 +248,7 @@ int main(int argc, char **argv) {
         waitKey();
         printMain(con, info, mode);
         break;
-      case SU2_ACT_FIRMTRANSFER:
-        TitleList *installedTitles;
-      
+      case SU2_ACT_FIRMTRANSFER:      
         LOG_INFO("Firmware transfer requested.");
         clearDisplay(con);
         printf("Installing NATIVE_FIRM, this will probably crash but\n" \
@@ -267,7 +267,7 @@ int main(int argc, char **argv) {
         }
 
         printf("Getting installed titles...\n");
-        installTitles = getInstalledTitles();
+        installedTitles = getInstalledTitles();
         printf("Finding firmware title...\n");
         for(i = 0; i < installedTitles->nTitles; i++) {
           if(installedTitles->title[i]->titleID == 0x0004013800000002 ||
